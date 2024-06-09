@@ -481,15 +481,22 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+     // Check if root_dir starts with "s3://" and remove the prefix if present
+    std::string processed_root_dir = root_dir;
+    const std::string s3_prefix = "s3://";
+    if (root_dir.compare(0, s3_prefix.length(), s3_prefix) == 0) {
+        processed_root_dir = root_dir.substr(s3_prefix.length());
+    }
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(processed_root_dir));
 
     std::unordered_map<int64_t, std::set<int64_t>> tablet_versions;
     //                 ^^^^^^^ tablet id
     //                                  ^^^^^^^^^ version number
 
-    auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
-    auto data_dir = join_path(root_dir, kSegmentDirectoryName);
-    auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
+    auto meta_dir = join_path(processed_root_dir, kMetadataDirectoryName);
+    auto data_dir = join_path(processed_root_dir, kSegmentDirectoryName);
+    auto log_dir = join_path(processed_root_dir, kTxnLogDirectoryName);
 
     std::set<std::string> txn_logs;
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
