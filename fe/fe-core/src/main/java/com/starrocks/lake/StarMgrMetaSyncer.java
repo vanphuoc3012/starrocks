@@ -17,7 +17,9 @@ package com.starrocks.lake;
 import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
 import com.google.common.base.Preconditions;
+import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -126,7 +128,24 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
-                    response.failedTablets.forEach(shards::remove);
+                    for (Long shardId : response.failedTablets) {
+                        long workerGroupId = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse().getAnyAvailableCluster()
+                                        .getWorkerGroupId();
+                        try {
+                            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, workerGroupId);
+                            if (shardInfo == null) {
+                                continue;
+                            }
+                            if (shardInfo.getFilePath().getFullPath().startsWith("s3://s3://")) {
+                                LOG.info("this is tablet with wrong config, need to be remove");
+                                continue;
+                            }
+                            shards.remove(shardId);
+                        } catch (StarClientException e) {
+                            LOG.warn("failed to get shard {} info from starMgr", shardId);
+                        }
+                    }
+                    //response.failedTablets.forEach(shards::remove);
                 }
             } catch (Throwable e) {
                 LOG.error(e);

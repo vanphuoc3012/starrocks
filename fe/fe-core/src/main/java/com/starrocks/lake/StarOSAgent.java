@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
@@ -216,6 +215,12 @@ public class StarOSAgent {
         try {
             String suffix = constructTablePath(dbId, tableId);
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
+
+            //wrong file path throw exeption
+            if (pathInfo.getFullPath().startsWith("s3://s3://")) {
+                LOG.warn("Wrong file path: {}", pathInfo.getFullPath());
+                throw new DdlException("Wrong file path: " + pathInfo.getFullPath());
+            }
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
