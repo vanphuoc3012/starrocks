@@ -96,6 +96,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public static void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
+        Set<Long> shardsNeedToDelete = new HashSet<>();
+
         // group shards by be
         for (long shardId : shardIds) {
             try {
@@ -103,10 +105,32 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 Warehouse warehouse = manager.getBackgroundWarehouse();
                 long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, workerGroupId);
+                if (shardInfo != null && shardInfo.getFilePath().getFullPath().startsWith("s3://s3://")) {
+                    LOG.info("tablet {} is wrongly config, need to be remove", shardId);
+                    shardsNeedToDelete.add(shardId);
+
+                    if (shardsNeedToDelete.size() > 1000) {
+                        LOG.info("Start delete {} shards", shardsNeedToDelete.size());
+                        starOSAgent.deleteShards(shardsNeedToDelete);
+                        shardsNeedToDelete.clear();
+                    }
+                    continue;
+                }
+
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (UserException ignored1) {
+            } catch (UserException | StarClientException ignored1) {
                 // ignore error
+            }
+        }
+
+        if (!shardsNeedToDelete.isEmpty()) {
+            LOG.info("Start delete {} shards", shardsNeedToDelete.size());
+            try {
+                starOSAgent.deleteShards(shardsNeedToDelete);
+            } catch (DdlException e) {
+                LOG.warn("failed to delete shard from starMgr");
             }
         }
 
@@ -128,24 +152,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
-                    for (Long shardId : response.failedTablets) {
-                        long workerGroupId = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse().getAnyAvailableCluster()
-                                        .getWorkerGroupId();
-                        try {
-                            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, workerGroupId);
-                            if (shardInfo == null) {
-                                continue;
-                            }
-                            if (shardInfo.getFilePath().getFullPath().startsWith("s3://s3://")) {
-                                LOG.info("this is tablet with wrong config, need to be remove");
-                                continue;
-                            }
-                            shards.remove(shardId);
-                        } catch (StarClientException e) {
-                            LOG.warn("failed to get shard {} info from starMgr", shardId);
-                        }
-                    }
-                    //response.failedTablets.forEach(shards::remove);
+                    response.failedTablets.forEach(shards::remove);
                 }
             } catch (Throwable e) {
                 LOG.error(e);
