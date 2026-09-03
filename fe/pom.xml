@@ -1483,6 +1483,12 @@ under the License.
             </dependency>
 
             <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-gcp</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starclient</artifactId>
                 <version>${staros.version}</version>

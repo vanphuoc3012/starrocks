@@ -322,6 +322,20 @@ under the License.
             <artifactId>iceberg-aws</artifactId>
         </dependency>
 
+        <!-- Added for GCSFileIO (org.apache.iceberg.gcp.gcs.GCSFileIO). -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-gcp</artifactId>
+        </dependency>
+        <!-- iceberg-gcp declares google-cloud-storage as `provided`; supply it
+             (2.59.0 = libraries-bom 26.66.0, the set iceberg 1.10.0 tests).
+             Brings gax/gax-httpjson/google-cloud-core-http transitively. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+            <version>2.59.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
